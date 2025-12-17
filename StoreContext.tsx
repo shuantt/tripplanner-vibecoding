@@ -1,5 +1,6 @@
 import React, { createContext, useReducer, useEffect, useContext, ReactNode } from 'react';
-import { AppState, Action, Trip, AppSettings } from './types';
+import { AppState, Action, Trip, AppSettings, ItineraryItem, Expense, Recommendation, Note } from './types';
+import { generateId } from './utils';
 
 // Default Settings with Icons
 const DEFAULT_SETTINGS: AppSettings = {
@@ -33,8 +34,8 @@ const INITIAL_STATE: AppState = {
   settings: DEFAULT_SETTINGS
 };
 
-// Renamed key to reflect "DB" nature, though still using localStorage for now
-const STORAGE_KEY = 'travel_planner_db_v1';
+// Updated key to force load the new template data
+const STORAGE_KEY = 'travel_planner_template_tokyo_v1';
 
 const StoreContext = createContext<{
   state: AppState;
@@ -191,18 +192,104 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
-  // Seed data if empty for demo purposes
+  // Seed data for Tokyo 4-Day Template
   useEffect(() => {
     if (state.trips.length === 0) {
-      const demoTripId = 'demo-trip-1';
-      const demoTrip: Trip = {
-        id: demoTripId,
-        title: '東京冒險之旅 🇯🇵',
-        days: 5,
-        participants: ['小明', '小華', '美美'],
-        startDate: new Date().toISOString().split('T')[0]
+      const tripId = 'template-tokyo-1';
+      
+      // 1. Create Trip
+      const templateTrip: Trip = {
+        id: tripId,
+        title: '東京4天3夜 (Template)',
+        days: 4,
+        participants: ['小明', '小美', '小華'],
+        startDate: '2024-12-01',
+        endDate: '2024-12-04'
       };
-      dispatch({ type: 'ADD_TRIP', payload: demoTrip });
+      dispatch({ type: 'ADD_TRIP', payload: templateTrip });
+
+      // 2. Add Itinerary Items
+      const itineraryItems: ItineraryItem[] = [
+          // Day 1 (Index 0): 12/01
+          { id: generateId(), tripId, dayIndex: 0, time: '09:00', title: '飛機去程', location: '桃園機場 -> 成田機場', content: 'BR198', type: 'transport' },
+          { id: generateId(), tripId, dayIndex: 0, time: '14:00', title: '淺草寺', location: '淺草雷門', content: '參拜、逛仲見世通', type: 'sightseeing' },
+          { id: generateId(), tripId, dayIndex: 0, time: '16:00', title: '前往飯店', location: '', content: '搭乘地鐵', type: 'transport' },
+          { id: generateId(), tripId, dayIndex: 0, time: '18:00', title: '晚餐：一蘭拉麵', location: '上野店', content: '記得加辣', type: 'food' },
+          { id: generateId(), tripId, dayIndex: 0, time: '21:00', title: '入住飯店', location: '上野 APA Hotel', content: 'Check-in', type: 'accommodation' },
+
+          // Day 2 (Index 1): 12/02
+          { id: generateId(), tripId, dayIndex: 1, time: '09:00', title: 'SHIBUYA SKY', location: '澀谷 Scramble Square', content: '觀景台拍照', type: 'sightseeing' },
+          { id: generateId(), tripId, dayIndex: 1, time: '12:30', title: '午餐：敘敘苑燒肉', location: '澀谷店', content: '商業午餐', type: 'food' },
+          { id: generateId(), tripId, dayIndex: 1, time: '15:00', title: '前往原宿', location: '', content: '山手線', type: 'transport' },
+          { id: generateId(), tripId, dayIndex: 1, time: '22:00', title: '返回飯店', location: '上野', content: '', type: 'accommodation' },
+
+          // Day 3 (Index 2): 12/03
+          { id: generateId(), tripId, dayIndex: 2, time: '10:00', title: '東京迪士尼樂園', location: '舞濱', content: '全日遊', type: 'sightseeing' },
+          { id: generateId(), tripId, dayIndex: 2, time: '13:00', title: '樂園午餐', location: '紅心女王宴會大廳', content: '', type: 'food' },
+          { id: generateId(), tripId, dayIndex: 2, time: '21:30', title: '返回市區', location: '', content: 'JR 京葉線', type: 'transport' },
+          { id: generateId(), tripId, dayIndex: 2, time: '23:00', title: '休息', location: '上野', content: '', type: 'accommodation' },
+
+          // Day 4 (Index 3): 12/04
+          { id: generateId(), tripId, dayIndex: 3, time: '09:00', title: '築地場外市場', location: '築地', content: '吃玉子燒、海鮮丼', type: 'sightseeing' },
+          { id: generateId(), tripId, dayIndex: 3, time: '14:00', title: '飛機回程', location: '成田機場 -> 桃園機場', content: 'BR197', type: 'transport' },
+      ];
+      itineraryItems.forEach(item => dispatch({ type: 'ADD_ITEM', payload: item }));
+
+      // 3. Add Expenses
+      const expenses: Expense[] = [
+          { 
+              id: generateId(), 
+              tripId, 
+              title: '飯店住宿費', 
+              amount: 20000, 
+              payer: '小美', 
+              splitType: 'even', 
+              customSplits: {}, 
+              date: Date.now() 
+          },
+          { 
+              id: generateId(), 
+              tripId, 
+              title: '計程車費', 
+              amount: 2100, 
+              payer: '小明', 
+              splitType: 'even', 
+              customSplits: {}, 
+              date: Date.now() - 1000 
+          },
+          { 
+              id: generateId(), 
+              tripId, 
+              title: '章魚燒', 
+              amount: 700, 
+              payer: '小明', 
+              splitType: 'custom', 
+              customSplits: { '小明': 350, '小美': 350 }, 
+              date: Date.now() - 2000 
+          },
+      ];
+      expenses.forEach(exp => dispatch({ type: 'ADD_EXPENSE', payload: exp }));
+
+      // 4. Add Recommendations
+      const recs: Recommendation[] = [
+          { id: generateId(), tripId, title: 'Tokyo Banana', content: '東京必買經典伴手禮，香蕉卡士達蛋糕。', type: 'shopping', images: [], order: 0 },
+          { id: generateId(), tripId, title: 'New York Perfect Cheese', content: '超人氣起司奶油脆餅，要在車站排隊買。', type: 'shopping', images: [], order: 1 },
+          { id: generateId(), tripId, title: '迪士尼門票 Coupon', content: 'Klook 購票優惠連結', type: 'other', url: 'https://www.klook.com', images: [], order: 2 },
+      ];
+      recs.forEach(rec => dispatch({ type: 'ADD_REC', payload: rec }));
+
+      // 5. Add Notes
+      const note: Note = {
+          id: generateId(),
+          tripId,
+          title: 'Suica 快速交通卡教學 (iOS)',
+          content: '1. 打開 iPhone 的「錢包 (Wallet)」App。\n2. 點擊右上角的「+」號。\n3. 選擇「交通卡」。\n4. 在搜尋欄輸入「Suica」。\n5. 點擊 Suica 並依照指示加值金額即可使用。\n(進出站時不用解鎖手機，直接感應即可)',
+          type: 'transport',
+          url: 'https://mrmad.com.tw/iphone-suica',
+          images: [],
+          order: 0
+      };
+      dispatch({ type: 'ADD_NOTE', payload: note });
     }
   }, [state.trips.length]);
 
