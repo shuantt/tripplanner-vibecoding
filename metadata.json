@@ -1,0 +1,5 @@
+{
+  "name": "TravelPlanner",
+  "description": "A mobile-first, iOS-style collaborative travel itinerary application featuring schedule management, expense splitting, recommendations, and notes with offline persistence.",
+  "requestFramePermissions": []
+}
