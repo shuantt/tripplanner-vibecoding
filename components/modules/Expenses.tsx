@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../../StoreContext';
+import { useAuth } from '../../AuthContext';
 import { Trip, Expense, SplitType } from '../../types';
 import { Plus, DollarSign, User, Search, Trash2, ArrowRight, Filter } from 'lucide-react';
 import { calculateDebts, generateId } from '../../utils';
@@ -15,7 +16,7 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
   const [payerFilter, setPayerFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  
+
   // UI State for delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -33,9 +34,9 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
   const debts = useMemo(() => calculateDebts(tripExpenses, trip.participants), [tripExpenses, trip.participants]);
 
   const filteredExpenses = tripExpenses.filter(e => {
-      const matchesSearch = e.title.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesPayer = payerFilter === 'all' || e.payer === payerFilter;
-      return matchesSearch && matchesPayer;
+    const matchesSearch = e.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesPayer = payerFilter === 'all' || e.payer === payerFilter;
+    return matchesSearch && matchesPayer;
   });
 
   const handleCustomSplitChange = (person: string, val: string) => {
@@ -43,31 +44,31 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
   };
 
   const openCreateModal = () => {
-      setShowDeleteConfirm(false);
-      setEditingExpense(null);
-      setTitle('');
-      setAmount('');
-      setPayer(trip.participants[0]);
-      setSplitType('even');
-      setCustomSplits({});
-      setIsModalOpen(true);
+    setShowDeleteConfirm(false);
+    setEditingExpense(null);
+    setTitle('');
+    setAmount('');
+    setPayer(trip.participants[0]);
+    setSplitType('even');
+    setCustomSplits({});
+    setIsModalOpen(true);
   }
 
   const openEditModal = (e: Expense) => {
-      setShowDeleteConfirm(false);
-      setEditingExpense(e);
-      setTitle(e.title);
-      setAmount(e.amount.toString());
-      setPayer(e.payer);
-      setSplitType(e.splitType);
-      setCustomSplits(e.customSplits);
-      setIsModalOpen(true);
+    setShowDeleteConfirm(false);
+    setEditingExpense(e);
+    setTitle(e.title);
+    setAmount(e.amount.toString());
+    setPayer(e.payer);
+    setSplitType(e.splitType);
+    setCustomSplits(e.customSplits);
+    setIsModalOpen(true);
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const cost = parseFloat(amount);
-    
+
     // Validation for custom split
     if (splitType === 'custom') {
       const totalSplit = (Object.values(customSplits) as number[]).reduce((a, b) => a + b, 0);
@@ -89,79 +90,95 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
     };
 
     if (editingExpense) {
-        dispatch({ type: 'UPDATE_EXPENSE', payload });
+      dispatch({ type: 'UPDATE_EXPENSE', payload });
     } else {
-        dispatch({ type: 'ADD_EXPENSE', payload });
-        // Reset Search
-        setSearchTerm('');
-        setPayerFilter('all');
+      dispatch({ type: 'ADD_EXPENSE', payload });
+      // Reset Search
+      setSearchTerm('');
+      setPayerFilter('all');
     }
-    
+
     setIsModalOpen(false);
   };
 
   const executeDelete = () => {
     if (editingExpense) {
-        dispatch({ type: 'DELETE_EXPENSE', payload: editingExpense.id });
-        setIsModalOpen(false);
+      dispatch({ type: 'DELETE_EXPENSE', payload: editingExpense.id });
+      setIsModalOpen(false);
     }
   }
 
   return (
-    <div className="h-full flex flex-col pb-24">
+    <div className="h-full flex flex-col">
+      {/* Participant Filter / Personal Summary */}
+      <div className="px-3 pt-3 flex gap-3 overflow-x-auto no-scrollbar">
+        {trip.participants.map(p => (
+          <button
+            key={p}
+            onClick={() => setPersonDetail(p)}
+            className="flex flex-col items-center gap-1 min-w-[60px] cursor-pointer active:scale-95 transition-transform"
+          >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow-sm border-2 ${p === user?.name ? 'bg-black text-white border-black' : 'bg-white text-gray-700 border-gray-100'}`}>
+              {p.charAt(0)}
+            </div>
+            <span className="text-[10px] font-bold text-gray-500 truncate max-w-full">{p}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Debts Summary Dashboard */}
-      <div className="mx-4 mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div className="mx-3 mt-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <h3 className="text-xs font-bold text-gray-400 mb-4 uppercase tracking-wider flex items-center gap-2">
           <DollarSign size={14} /> 結算建議
         </h3>
-        
+
         {debts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-4 text-green-600 bg-green-50 rounded-xl">
-                <span className="font-bold">🎉 帳款已結清！</span>
-                <span className="text-xs opacity-70 mt-1">目前沒有人欠錢</span>
-            </div>
+          <div className="flex flex-col items-center justify-center py-4 text-green-600 bg-green-50 rounded-xl">
+            <span className="font-bold">🎉 帳款已結清！</span>
+            <span className="text-xs opacity-70 mt-1">目前沒有人欠錢</span>
+          </div>
         ) : (
-            <div className="space-y-3">
-              {debts.map((d, idx) => (
-                <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-                  <div className="flex items-center gap-3 text-sm">
-                    <div className="font-medium text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{d.from}</div>
-                    <ArrowRight size={14} className="text-gray-400" />
-                    <div className="font-medium text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{d.to}</div>
-                  </div>
-                  <span className="font-mono font-bold text-gray-900">${d.amount.toFixed(2)}</span>
+          <div className="space-y-3">
+            {debts.map((d, idx) => (
+              <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                <div className="flex items-center gap-3 text-sm">
+                  <div className="font-medium text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{d.from}</div>
+                  <ArrowRight size={14} className="text-gray-400" />
+                  <div className="font-medium text-gray-900 bg-gray-100 px-2 py-1 rounded-md">{d.to}</div>
                 </div>
-              ))}
-            </div>
+                <span className="font-mono font-bold text-gray-900">${d.amount.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
       {/* Search & Filter */}
-      <div className="px-4 mb-4 mt-6 flex gap-2">
+      <div className="px-3 mb-3 mt-4 flex gap-2">
         <div className="relative flex-1">
           <Search size={18} className="absolute left-3 top-3 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="搜尋帳款..." 
+          <input
+            type="text"
+            placeholder="搜尋帳款..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl border border-gray-200 text-gray-900 focus:outline-none focus:border-black transition-colors"
           />
         </div>
-        <select 
-            value={payerFilter}
-            onChange={e => setPayerFilter(e.target.value)}
-            className="bg-white border border-gray-200 text-gray-700 rounded-xl px-3 text-sm focus:border-black focus:ring-0"
+        <select
+          value={payerFilter}
+          onChange={e => setPayerFilter(e.target.value)}
+          className="bg-white border border-gray-200 text-gray-700 rounded-xl px-3 text-sm focus:border-black focus:ring-0"
         >
-            <option value="all">所有人</option>
-            {trip.participants.map(p => (
-                <option key={p} value={p}>{p}</option>
-            ))}
+          <option value="all">所有人</option>
+          {trip.participants.map(p => (
+            <option key={p} value={p}>{p}</option>
+          ))}
         </select>
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-4 space-y-3">
+      <div className="flex-1 overflow-y-auto px-3 space-y-3 pb-24">
         {filteredExpenses.map(expense => (
           <div key={expense.id} onClick={() => openEditModal(expense)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center group cursor-pointer active:scale-98 transition-transform">
             <div>
@@ -173,17 +190,17 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
               </p>
             </div>
             <div className="flex items-center gap-3">
-                <span className="font-mono font-bold text-lg text-gray-900">${expense.amount.toFixed(2)}</span>
+              <span className="font-mono font-bold text-lg text-gray-900">${expense.amount.toFixed(2)}</span>
             </div>
           </div>
         ))}
         {filteredExpenses.length === 0 && (
-            <div className="text-center text-gray-400 mt-8">找不到帳款紀錄</div>
+          <div className="text-center text-gray-400 mt-8">找不到帳款紀錄</div>
         )}
       </div>
 
       {/* FAB */}
-      <button 
+      <button
         onClick={openCreateModal}
         className="fixed bottom-24 right-6 w-14 h-14 bg-black text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-20"
       >
@@ -228,8 +245,8 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
               {trip.participants.map(p => (
                 <div key={p} className="flex items-center gap-2">
                   <span className="text-sm w-20 truncate text-gray-700">{p}</span>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     step="0.01"
                     placeholder="0.00"
                     value={customSplits[p] || ''}
@@ -242,36 +259,36 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
           )}
 
           <div className="pt-2 flex gap-3">
-             {editingExpense && (
-                !showDeleteConfirm ? (
-                    <button 
-                        type="button" 
-                        onClick={() => setShowDeleteConfirm(true)} 
-                        className="p-3 text-red-500 bg-red-50 rounded-xl flex-1 font-medium hover:bg-red-100 transition-colors"
-                    >
-                        刪除
-                    </button>
-                ) : (
-                    <div className="flex flex-1 gap-2 animate-in fade-in zoom-in duration-200">
-                        <button 
-                            type="button" 
-                            onClick={() => setShowDeleteConfirm(false)} 
-                            className="p-3 text-gray-500 bg-gray-100 rounded-xl flex-1 font-medium hover:bg-gray-200 transition-colors"
-                        >
-                            取消
-                        </button>
-                        <button 
-                            type="button" 
-                            onClick={executeDelete} 
-                            className="p-3 text-white bg-red-500 rounded-xl flex-[2] font-bold hover:bg-red-600 transition-colors"
-                        >
-                            確認刪除
-                        </button>
-                    </div>
-                )
-             )}
+            {editingExpense && (
+              !showDeleteConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-3 text-red-500 bg-red-50 rounded-xl flex-1 font-medium hover:bg-red-100 transition-colors"
+                >
+                  刪除
+                </button>
+              ) : (
+                <div className="flex flex-1 gap-2 animate-in fade-in zoom-in duration-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="p-3 text-gray-500 bg-gray-100 rounded-xl flex-1 font-medium hover:bg-gray-200 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={executeDelete}
+                    className="p-3 text-white bg-red-500 rounded-xl flex-[2] font-bold hover:bg-red-600 transition-colors"
+                  >
+                    確認刪除
+                  </button>
+                </div>
+              )
+            )}
             <button type="submit" className="flex-[2] p-3 bg-black text-white rounded-xl font-bold">
-                儲存
+              儲存
             </button>
           </div>
         </form>
