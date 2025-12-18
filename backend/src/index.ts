@@ -36,7 +36,7 @@ async function verifyPassword(password: string, storedHash: string, salt: string
 }
 
 // --- TEMPLATE DATA ---
-function getTemplateData(userId: string) {
+function getTemplateData(userId: string, userName: string) {
   const tripId = crypto.randomUUID();
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let shortId = '';
@@ -60,7 +60,7 @@ function getTemplateData(userId: string) {
       days: 4,
       start_date: start.toISOString().split('T')[0],
       end_date: end.toISOString().split('T')[0],
-      participants: "我,朋友A"
+      participants: `${userName},朋友A`
     },
     itinerary: [
       { id: crypto.randomUUID(), trip_id: tripId, day_index: 0, time: '14:00', title: '成田機場接機', location: 'Narita Airport', content: '搭乘京成電鐵 Skyliner 前往新宿', type: 'transport' },
@@ -75,7 +75,7 @@ function getTemplateData(userId: string) {
       { id: crypto.randomUUID(), trip_id: tripId, day_index: 3, time: '15:00', title: '前往機場', location: '東京車站', content: '搭乘 N-EX', type: 'transport' }
     ],
     expenses: [
-      { id: crypto.randomUUID(), trip_id: tripId, title: '六歌仙燒肉', amount: 24000, payer: '我', split_type: 'even', custom_splits: '{}', date: Date.now() },
+      { id: crypto.randomUUID(), trip_id: tripId, title: '六歌仙燒肉', amount: 24000, payer: userName, split_type: 'even', custom_splits: '{}', date: Date.now() },
       { id: crypto.randomUUID(), trip_id: tripId, title: '澀谷 Sky 門票', amount: 6000, payer: '朋友A', split_type: 'even', custom_splits: '{}', date: Date.now() },
     ],
     recommendations: [
@@ -118,15 +118,16 @@ app.post('/api/auth/register', async (c) => {
   const { hash, salt } = await hashPassword(password);
   const storedValue = `${salt}:${hash}`;
   const userId = crypto.randomUUID();
+  const userName = name || email.split('@')[0];
 
   // Insert User
   await db.prepare('INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(userId, email, storedValue, name || email.split('@')[0], Date.now())
+    .bind(userId, email, storedValue, userName, Date.now())
     .run();
 
   // --- SEED TEMPLATE TRIP ---
   try {
-    const { trip, itinerary, expenses, recommendations, notes } = getTemplateData(userId);
+    const { trip, itinerary, expenses, recommendations, notes } = getTemplateData(userId, userName);
     const batch = [];
 
     // 1. Trip (With Participants)
