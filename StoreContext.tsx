@@ -65,7 +65,7 @@ const INITIAL_STATE: AppState = {
   ],
   notes: [
     { id: 'nt-1', tripId: TEMPLATE_TRIP_ID, title: '打包清單', content: '1. 護照 2. 換日幣 3. 行動電源 4. 電壓轉接頭 5. eSim 卡號', type: 'general', images: [], order: 0 },
-    { id: 'nt-2', tripId: TEMPLATE_TRIP_ID, title: '機場接送資訊', content: 'Skyliner 單程票已在 Klook 購買，到機場 QR Code 換票即可。', type: 'transport', images: [], order: 1 }
+    { id: 'nt-2', tripId: TEMPLATE_TRIP_ID, title: '機場接送資訊', content: 'Skyliner 單程票已在 Klook 購買，到機場 QR Code 換票即可。', type: 'transport', images: [], order: 1 },
     { id: 'nt-3', tripId: TEMPLATE_TRIP_ID, title: 'Suica 快速交通卡教學 (iOS)', content:'1. 打開 iPhone 的「錢包 (Wallet)」App。\n2. 點擊右上角的「+」號。\n3. 選擇「交通卡」。\n4. 在搜尋欄輸入「Suica」。\n5. 點擊 Suica 並依照指示加值金額即可使用。\n(進出站時不用解鎖手機，直接感應即可)', type: 'transport', images: [], url:'https://mrmad.com.tw/iphone-suica', order: 2 }
   ],
   settings: DEFAULT_SETTINGS
