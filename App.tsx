@@ -45,7 +45,9 @@ const TripCard: React.FC<{ trip: Trip; onClick: () => void; onDelete: (e: React.
             <Copy size={16} />
           </button>
           <button onClick={onEdit} className="text-gray-400 hover:text-black p-2 rounded-full hover:bg-gray-100 transition-colors"><SettingsIcon size={16} /></button>
-          <button onClick={onDelete} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
+          {trip.role === 'OWNER' && (
+            <button onClick={onDelete} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
+          )}
         </div>
       </div>
       <h3 className="text-xl font-bold text-gray-900 mb-[10px]">{trip.title}</h3>
@@ -195,7 +197,7 @@ const MainApp = () => {
         {activeTab === 'expenses' && <Expenses trip={activeTrip} />}
         {activeTab === 'recs' && <Recommendations trip={activeTrip} />}
         {activeTab === 'notes' && <Notes trip={activeTrip} />}
-        {activeTab === 'settings' && <SettingsModule />}
+        {activeTab === 'settings' && <SettingsModule tripId={activeTrip.id} />}
       </main>
 
       <nav className="bg-white border-t border-gray-100 pb-[env(safe-area-inset-bottom)] shrink-0 z-50 shadow-sm">

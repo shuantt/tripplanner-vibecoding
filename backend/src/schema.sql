@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS trips (
   days INTEGER NOT NULL,
   start_date TEXT,
   end_date TEXT,
-  cover_image TEXT, -- Can be a URL or ID linking to images table
+  cover_image TEXT,
+  participants TEXT, -- JSON string of participant names
+  deleted_at INTEGER, -- Soft delete timestamp
   last_sync INTEGER,
   FOREIGN KEY (owner_id) REFERENCES users(id)
 );

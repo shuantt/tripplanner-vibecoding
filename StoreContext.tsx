@@ -41,12 +41,14 @@ const StoreContext = createContext<{
   dispatch: React.Dispatch<Action>;
   syncTrip: (tripId: string) => Promise<void>;
   importTripById: (shortId: string) => Promise<boolean>;
+  renameParticipant: (tripId: string, oldName: string, newName: string) => void;
   isLoading: boolean;
 }>({
   state: INITIAL_STATE,
   dispatch: () => null,
   syncTrip: async () => { },
   importTripById: async () => false,
+  renameParticipant: () => { },
   isLoading: false
 });
 
@@ -147,20 +149,13 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const { token, user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Initialize from LocalStorage just to have Settings, but Trips should come from Server for this User
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE, (initial) => {
-    // We can persist settings, but trip data is now user-scoped. 
-    // If we load "all trips" from LS, they might belong to another user if we shared this browser?
-    // Safer: Only load settings from LS. Trips load from API.
-    // BUT for offline support/optimistic, we might want to cache user-specific data.
-    // For MVP: Let's trust the server.
     return initial;
   });
 
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
-    // We can cache to LS here if we want, but careful with multi-user.
   }, [state]);
 
   const API_BASE = 'https://tripplanner-api.tehsuan-tht.workers.dev';
@@ -168,7 +163,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Fetch Trips when Token changes
   const loadTrips = async () => {
     if (!token) {
-      // Clear trips if no token
       dispatch({ type: 'SET_STATE', payload: { ...INITIAL_STATE, settings: state.settings } });
       return;
     }
@@ -225,6 +219,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const currentState = stateRef.current;
     const trip = currentState.trips.find(t => t.id === tripId);
     if (!trip) return;
+
+    // Check permission - although backend also enforces, we can skip sync if we know we are pure VIEWER (not implemented yet, assumed editor)
 
     const data = {
       trip,
@@ -308,6 +304,37 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (tid) setDirtyTripId(tid);
   };
 
+  const renameParticipant = (tripId: string, oldName: string, newName: string) => {
+    const trip = state.trips.find(t => t.id === tripId);
+    if (!trip) return;
+
+    // 1. Update Trip Participants List
+    const newParticipants = trip.participants.map(p => p === oldName ? newName : p);
+    dispatchWithSync({ type: 'UPDATE_TRIP', payload: { ...trip, participants: newParticipants } });
+
+    // 2. Update Expenses
+    const tripExpenses = state.expenses.filter(e => e.tripId === tripId);
+    tripExpenses.forEach(exp => {
+      let dirty = false;
+      let newPayer = exp.payer;
+      let newSplits = { ...exp.customSplits };
+
+      if (exp.payer === oldName) {
+        newPayer = newName;
+        dirty = true;
+      }
+      if (exp.customSplits[oldName] !== undefined) {
+        newSplits[newName] = newSplits[oldName];
+        delete newSplits[oldName];
+        dirty = true;
+      }
+
+      if (dirty) {
+        dispatchWithSync({ type: 'UPDATE_EXPENSE', payload: { ...exp, payer: newPayer, customSplits: newSplits } });
+      }
+    });
+  };
+
   const importTripById = async (shortId: string): Promise<boolean> => {
     if (!token) return false;
     setIsLoading(true);
@@ -351,10 +378,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       importTripById(joinId);
       window.history.replaceState({}, document.title, "/");
     }
-  }, [token]); // Run when token available
+  }, [token]);
 
   return (
-    <StoreContext.Provider value={{ state, dispatch: dispatchWithSync, syncTrip: performSync, importTripById, isLoading }}>
+    <StoreContext.Provider value={{ state, dispatch: dispatchWithSync, syncTrip: performSync, importTripById, renameParticipant, isLoading }}>
       {children}
     </StoreContext.Provider>
   );
