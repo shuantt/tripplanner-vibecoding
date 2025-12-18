@@ -1,0 +1,18 @@
+
+name = "tripplanner-api"
+main = "src/index.ts"
+compatibility_date = "2024-02-22"
+
+# D1 Database Bindings
+[[d1_databases]]
+binding = "DB" # i.e. available in your Worker on env.DB
+database_name = "tripplanner-db"
+database_id = "7764171c-84c7-41a0-901d-4323f4e59069"
+
+# R2 Bucket Bindings (Future use, commented out for now)
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "tripplanner-storage"
+
+[observability]
+enabled = true
