@@ -1,18 +1,14 @@
-// --- Database Schema Types (Prepared for Cloudflare D1) ---
-
-// SQLite: TEXT ('even' | 'custom')
+// --- Database Schema Types ---
 export type SplitType = 'even' | 'custom';
-
-// SQLite: TEXT (Dynamic UUIDs for categories)
 export type ItemType = string; 
 export type NoteType = string;
 export type RecType = string;
 
 export interface Category {
-  id: string;       // Primary Key
-  label: string;    // TEXT
-  color: string;    // TEXT (Tailwind Class)
-  icon: string;     // TEXT (Lucide Icon Name)
+  id: string;
+  label: string;
+  color: string;
+  icon: string;
 }
 
 export interface AppSettings {
@@ -22,59 +18,60 @@ export interface AppSettings {
 }
 
 export interface Trip {
-  id: string;           // Primary Key (UUID)
-  title: string;        // TEXT
-  days: number;         // INTEGER
-  participants: string[]; // JSON TEXT: ["Alice", "Bob"]
-  startDate: string;    // TEXT (ISO Date YYYY-MM-DD)
-  endDate?: string;     // TEXT (ISO Date YYYY-MM-DD)
+  id: string;           
+  shortId: string;      // TK-8F2A 格式的分享碼
+  title: string;
+  days: number;
+  participants: string[];
+  startDate: string;
+  endDate?: string;
+  lastSync?: number;    // 同步時間戳
 }
 
 export interface ItineraryItem {
-  id: string;           // Primary Key (UUID)
-  tripId: string;       // Foreign Key -> Trip.id
-  dayIndex: number;     // INTEGER
-  time: string;         // TEXT (HH:mm)
-  title: string;        // TEXT
-  location: string;     // TEXT
-  content: string;      // TEXT
-  type: ItemType;       // Foreign Key -> Category.id (Logical)
-  lat?: number;         // REAL
-  lng?: number;         // REAL
-  url?: string;         // TEXT
+  id: string;
+  tripId: string;
+  dayIndex: number;
+  time: string;
+  title: string;
+  location: string;
+  mapUrl?: string; // Google Maps specific URL
+  content: string;
+  type: ItemType;
+  url?: string; // General related link
 }
 
 export interface Expense {
-  id: string;           // Primary Key (UUID)
-  tripId: string;       // Foreign Key -> Trip.id
-  title: string;        // TEXT
-  amount: number;       // REAL
-  payer: string;        // TEXT
-  splitType: SplitType; // TEXT
-  customSplits: { [participantName: string]: number }; // JSON TEXT
-  date: number;         // INTEGER (Timestamp)
+  id: string;
+  tripId: string;
+  title: string;
+  amount: number;
+  payer: string;
+  splitType: SplitType;
+  customSplits: { [participantName: string]: number };
+  date: number;
 }
 
 export interface Recommendation {
-  id: string;           // Primary Key (UUID)
-  tripId: string;       // Foreign Key -> Trip.id
-  title: string;        // TEXT
-  content: string;      // TEXT
-  type: RecType;        // Foreign Key -> Category.id (Logical)
-  url?: string;         // TEXT
-  images: string[];     // JSON TEXT (Initially Base64, Future R2 URLs)
-  order: number;        // INTEGER
+  id: string;
+  tripId: string;
+  title: string;
+  content: string;
+  type: RecType;
+  url?: string;
+  images: string[];
+  order: number;
 }
 
 export interface Note {
-  id: string;           // Primary Key (UUID)
-  tripId: string;       // Foreign Key -> Trip.id
-  title: string;        // TEXT
-  content: string;      // TEXT
-  type: NoteType;       // Foreign Key -> Category.id (Logical)
-  url?: string;         // TEXT
-  images: string[];     // JSON TEXT (Initially Base64, Future R2 URLs)
-  order: number;        // INTEGER
+  id: string;
+  tripId: string;
+  title: string;
+  content: string;
+  type: NoteType;
+  url?: string;
+  images: string[];
+  order: number;
 }
 
 export interface Debt {
@@ -83,7 +80,6 @@ export interface Debt {
   amount: number;
 }
 
-// In-Memory State (Acts as a local cache of the DB)
 export interface AppState {
   trips: Trip[];
   itinerary: ItineraryItem[];
@@ -97,6 +93,7 @@ export type Action =
   | { type: 'ADD_TRIP'; payload: Trip }
   | { type: 'DELETE_TRIP'; payload: string }
   | { type: 'UPDATE_TRIP'; payload: Trip }
+  | { type: 'SET_STATE'; payload: AppState }
   | { type: 'ADD_ITEM'; payload: ItineraryItem }
   | { type: 'UPDATE_ITEM'; payload: ItineraryItem }
   | { type: 'DELETE_ITEM'; payload: string }

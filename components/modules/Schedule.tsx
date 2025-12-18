@@ -16,9 +16,7 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
   const [isManageDaysOpen, setIsManageDaysOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ItineraryItem | null>(null);
   
-  // UI State for delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
   const categories = state.settings.scheduleCategories;
 
   // Form State
@@ -26,6 +24,7 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
   const [formTime, setFormTime] = useState('09:00');
   const [formTitle, setFormTitle] = useState('');
   const [formLoc, setFormLoc] = useState('');
+  const [formMapUrl, setFormMapUrl] = useState('');
   const [formContent, setFormContent] = useState('');
   const [formType, setFormType] = useState<ItemType>(categories[0]?.id || 'sightseeing');
   const [formUrl, setFormUrl] = useState('');
@@ -34,7 +33,6 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
   const [draggedDayIndex, setDraggedDayIndex] = useState<number | null>(null);
   const [dragOverDayIndex, setDragOverDayIndex] = useState<number | null>(null);
 
-  // Generate Date Objects for the trip
   const tripDates = useMemo(() => getTripDates(trip.startDate, trip.days), [trip.startDate, trip.days]);
 
   const currentItems = state.itinerary
@@ -43,14 +41,52 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
 
   const getCategory = (id: string) => categories.find(c => c.id === id) || { label: '未分類', color: 'bg-gray-100 text-gray-500', icon: 'tag' };
 
+  /**
+   * Helper to generate Google Maps Embed URL.
+   * To avoid "Some custom on-map content could not be displayed" error:
+   * We MUST NOT pass a full Google Maps URL as the 'q' parameter.
+   * If the input is a URL, we try to extract the place name.
+   */
+  const getEmbedUrl = (mapUrl: string, loc: string) => {
+    let query = '';
+    
+    if (mapUrl && mapUrl.trim()) {
+      const trimmedMapUrl = mapUrl.trim();
+      if (trimmedMapUrl.startsWith('http')) {
+        // Regex to extract place name from /place/NAME/ in a Google Maps URL
+        const placeMatch = trimmedMapUrl.match(/\/place\/([^\/|\?]+)/);
+        if (placeMatch && placeMatch[1]) {
+          // Found a place name in the URL, decode it for the query
+          query = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+        } else {
+          // If it's a URL we can't parse easily, fallback to the location text (formLoc) 
+          // to ensure the embed remains valid and doesn't break.
+          query = loc;
+        }
+      } else {
+        // If mapUrl field is just a plain string/address
+        query = trimmedMapUrl;
+      }
+    } else {
+      // If no mapUrl provided, use the location text
+      query = loc;
+    }
+
+    if (!query || !query.trim()) return null;
+    
+    // Using the legacy but highly compatible embed URL format
+    return `https://maps.google.com/maps?q=${encodeURIComponent(query.trim())}&output=embed&z=15`;
+  };
+
   const handleOpenModal = (item?: ItineraryItem) => {
-    setShowDeleteConfirm(false); // Reset confirm state
+    setShowDeleteConfirm(false);
     if (item) {
       setEditingItem(item);
       setFormDayIndex(item.dayIndex);
       setFormTime(item.time);
       setFormTitle(item.title);
       setFormLoc(item.location);
+      setFormMapUrl(item.mapUrl || '');
       setFormContent(item.content);
       setFormType(item.type);
       setFormUrl(item.url || '');
@@ -60,19 +96,13 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
       setFormTime('09:00');
       setFormTitle('');
       setFormLoc('');
+      setFormMapUrl('');
       setFormContent('');
       setFormType(categories[0]?.id || 'sightseeing');
       setFormUrl('');
     }
     setIsModalOpen(true);
   };
-
-  const handleLocationClick = () => {
-    if(formLoc) {
-        const query = encodeURIComponent(formLoc);
-        window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
-    }
-  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,16 +113,14 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
       time: formTime,
       title: formTitle,
       location: formLoc,
+      mapUrl: formMapUrl,
       content: formContent,
       type: formType,
       url: formUrl
     };
 
-    if (editingItem) {
-      dispatch({ type: 'UPDATE_ITEM', payload });
-    } else {
-      dispatch({ type: 'ADD_ITEM', payload });
-    }
+    if (editingItem) dispatch({ type: 'UPDATE_ITEM', payload });
+    else dispatch({ type: 'ADD_ITEM', payload });
     setIsModalOpen(false);
   };
 
@@ -107,42 +135,24 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
     setDraggedDayIndex(index);
     e.dataTransfer.effectAllowed = "move";
   };
-
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (draggedDayIndex === null || draggedDayIndex === index) return;
     setDragOverDayIndex(index);
   };
-
-  const handleDragEnd = () => {
-      setDraggedDayIndex(null);
-      setDragOverDayIndex(null);
-  }
-
   const handleDrop = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
     if (draggedDayIndex !== null && draggedDayIndex !== targetIndex) {
-        dispatch({ 
-            type: 'SWAP_DAYS', 
-            payload: { tripId: trip.id, dayIndexA: draggedDayIndex, dayIndexB: targetIndex }
-        });
+        dispatch({ type: 'SWAP_DAYS', payload: { tripId: trip.id, dayIndexA: draggedDayIndex, dayIndexB: targetIndex } });
     }
-    handleDragEnd();
+    setDraggedDayIndex(null);
+    setDragOverDayIndex(null);
   };
 
-  const getDaySummary = (dayIndex: number) => {
-    const items = state.itinerary
-        .filter(i => i.tripId === trip.id && i.dayIndex === dayIndex)
-        .sort((a, b) => a.time.localeCompare(b.time));
-    
-    if (items.length === 0) return "無行程";
-    const firstItem = items[0];
-    const count = items.length;
-    return `${firstItem.title} ${count > 1 ? `(+${count - 1} 個行程)` : ''}`;
-  };
+  const mapEmbedUrl = getEmbedUrl(formMapUrl, formLoc);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-white">
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
         <div className="flex items-center px-4 py-2 border-b border-gray-50">
            <span className="font-bold text-xs text-gray-500 uppercase tracking-wider flex-1">行程規劃</span>
@@ -156,9 +166,7 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
                 key={index}
                 onClick={() => setSelectedDayIndex(index)}
                 className={`flex-shrink-0 px-5 py-2 rounded-full text-sm font-bold transition-colors ${
-                selectedDayIndex === index 
-                    ? 'bg-black text-white shadow-md' 
-                    : 'bg-white text-gray-500 border border-gray-200'
+                selectedDayIndex === index ? 'bg-black text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'
                 }`}
             >
                 {formatDateLabel(date)}
@@ -167,53 +175,53 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 bg-white">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
         {currentItems.length === 0 ? (
-          <div className="text-center text-gray-400 mt-10">
-            <p>此日目前沒有行程</p>
-          </div>
+          <div className="text-center text-gray-400 mt-10"><p>此日目前沒有行程</p></div>
         ) : (
           <div className="relative border-l-2 border-gray-100 ml-4 space-y-8">
             {currentItems.map(item => {
               const cat = getCategory(item.type);
               const CatIcon = getIconComponent(cat.icon);
+              const mapLink = item.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location)}`;
+
               return (
                 <div key={item.id} className="ml-6 relative">
                   <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-black border-2 border-white shadow-sm z-10" />
-                  
-                  <div onClick={() => handleOpenModal(item)} className="bg-white p-4 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.08)] border border-gray-100 active:scale-98 transition-transform cursor-pointer relative">
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="flex items-center gap-2">
-                          <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${cat.color}`}>
-                            <CatIcon size={10} />
-                            {cat.label}
-                          </span>
-                          <span className="text-sm font-bold text-gray-400 font-mono">
-                            {item.time}
-                          </span>
-                      </div>
+                  <div onClick={() => handleOpenModal(item)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 active:scale-98 transition-transform cursor-pointer relative">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${cat.color}`}><CatIcon size={10} /> {cat.label}</span>
+                        <span className="text-sm font-bold text-gray-400 font-mono">{item.time}</span>
                     </div>
-                    
                     <div className="flex justify-between items-start">
-                      <div>
-                          <h3 className="text-lg font-bold text-gray-900 leading-snug">{item.title}</h3>
-                          {item.location && (
-                              <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                              <MapPin size={12} /> {item.location}
-                              </p>
-                          )}
+                      <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-bold text-gray-900 truncate">{item.title}</h3>
+                          {item.location && <p className="text-sm text-gray-500 flex items-center gap-1 mt-1 truncate"><MapPin size={12} /> {item.location}</p>}
                       </div>
-                      {item.url && (
+                      <div className="flex items-center gap-2 ml-2 shrink-0">
+                        {/* Map Icon (Left) */}
+                        <a 
+                          href={mapLink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors" 
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <MapPin size={18} className="text-gray-600" />
+                        </a>
+                        {/* Link Icon (Right) */}
+                        {item.url && (
                           <a 
-                              href={item.url} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors"
-                              onClick={(e) => e.stopPropagation()}
+                            href={item.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-colors" 
+                            onClick={e => e.stopPropagation()}
                           >
-                              <ExternalLink size={18} className="text-blue-500"/>
+                            <ExternalLink size={18} className="text-blue-500"/>
                           </a>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -223,37 +231,30 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
         )}
       </div>
 
-      <button 
-        onClick={() => handleOpenModal()}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-black text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-20"
-      >
-        <Plus size={24} />
-      </button>
+      <button onClick={() => handleOpenModal()} className="fixed bottom-24 right-6 w-14 h-14 bg-black text-white rounded-full shadow-lg flex items-center justify-center z-20"><Plus size={24} /></button>
 
       <Modal isOpen={isManageDaysOpen} onClose={() => setIsManageDaysOpen(false)} title="管理天數排序">
         <div className="space-y-3">
-            <p className="text-xs text-gray-400 mb-2">長按並拖曳可重新排序天數與內容</p>
-            {tripDates.map((date, index) => (
-                <div 
-                    key={index} 
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragEnd={handleDragEnd}
-                    onDrop={(e) => handleDrop(e, index)}
-                    className={`flex items-center gap-3 p-3 bg-white rounded-xl border transition-all ${
-                        dragOverDayIndex === index ? 'border-t-4 border-t-black mt-1' : 'border-gray-100'
-                    } ${draggedDayIndex === index ? 'opacity-50' : 'opacity-100'}`}
-                >
-                    <div className="text-gray-300 cursor-grab active:cursor-grabbing p-1">
-                        <GripVertical size={20} />
+            <p className="text-xs text-gray-400 mb-2 font-medium">長按並拖曳可重新排序天數與內容</p>
+            {tripDates.map((date, index) => {
+                const dayItems = state.itinerary
+                  .filter(i => i.tripId === trip.id && i.dayIndex === index)
+                  .sort((a, b) => a.time.localeCompare(b.time));
+                const firstItemTitle = dayItems.length > 0 ? dayItems[0].title : "尚未設定行程";
+                const itemCountLabel = dayItems.length > 0 ? ` (+${dayItems.length} 個行程)` : "";
+
+                return (
+                    <div key={index} draggable onDragStart={(e) => handleDragStart(e, index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, index)}
+                        className={`flex items-center gap-4 p-4 bg-white rounded-xl border transition-all ${dragOverDayIndex === index ? 'border-t-4 border-t-black mt-1' : 'border-gray-100'} ${draggedDayIndex === index ? 'opacity-50' : 'shadow-sm'}`}
+                    >
+                        <div className="text-gray-300 p-1 shrink-0"><GripVertical size={20} /></div>
+                        <div className="flex-1 min-w-0">
+                            <span className="block font-bold text-gray-900 text-base">{formatDateLabel(date)}</span>
+                            <span className="block text-xs text-gray-400 truncate mt-0.5">{firstItemTitle}{itemCountLabel}</span>
+                        </div>
                     </div>
-                    <div className="flex-1">
-                        <span className="block font-bold text-gray-900 text-sm">{formatDateLabel(date)}</span>
-                        <span className="block text-xs text-gray-500 truncate mt-0.5">{getDaySummary(index)}</span>
-                    </div>
-                </div>
-            ))}
+                );
+            })}
         </div>
       </Modal>
 
@@ -261,107 +262,92 @@ export const Schedule: React.FC<ScheduleProps> = ({ trip }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">日期</label>
-              <select 
-                value={formDayIndex} 
-                onChange={e => setFormDayIndex(parseInt(e.target.value))} 
-                className="w-full p-3 bg-gray-50 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black"
-              >
-                  {tripDates.map((d, i) => (
-                      <option key={i} value={i}>{formatDateLabel(d)}</option>
-                  ))}
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">日期</label>
+              <select value={formDayIndex} onChange={e => setFormDayIndex(parseInt(e.target.value))} className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none">
+                  {tripDates.map((d, i) => <option key={i} value={i}>{formatDateLabel(d)}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">時間</label>
-              <input 
-                required 
-                type="time" 
-                value={formTime} 
-                onChange={e => setFormTime(e.target.value)} 
-                className="w-full p-3 bg-gray-50 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black appearance-none" 
-              />
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">時間</label>
+              <input required type="time" value={formTime} onChange={e => setFormTime(e.target.value)} className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none" />
             </div>
           </div>
-          
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">類型</label>
-            <select value={formType} onChange={e => setFormType(e.target.value as ItemType)} className="w-full p-3 bg-gray-50 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black">
-                {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.label}</option>
-                ))}
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">類型</label>
+            <select value={formType} onChange={e => setFormType(e.target.value as ItemType)} className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none">
+                {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </div>
-
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">標題</label>
-            <input required type="text" placeholder="我們要去哪裡？" value={formTitle} onChange={e => setFormTitle(e.target.value)} className="w-full p-3 bg-gray-50 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1 cursor-pointer" onClick={handleLocationClick}>地點</label>
-            <div className="relative">
-                <input type="text" placeholder="地址或地標名稱" value={formLoc} onChange={e => setFormLoc(e.target.value)} className="w-full p-3 bg-gray-50 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black" />
-                <MapPin size={16} className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">相關連結 (選填)</label>
-            <input type="url" placeholder="https://..." value={formUrl} onChange={e => setFormUrl(e.target.value)} className="w-full p-3 bg-gray-50 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">內容</label>
-            <textarea rows={3} placeholder="詳細資訊、訂位代號等..." value={formContent} onChange={e => setFormContent(e.target.value)} className="w-full p-3 bg-gray-50 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black" />
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">標題</label>
+            <input required type="text" placeholder="目的地名稱" value={formTitle} onChange={e => setFormTitle(e.target.value)} className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black" />
           </div>
           
-          {formLoc && (
-              <div className="rounded-xl overflow-hidden h-40 w-full bg-gray-100 border border-gray-200 mt-2">
-                 <iframe
-                    width="100%"
-                    height="100%"
-                    frameBorder="0"
-                    style={{ border: 0 }}
-                    src={`https://maps.google.com/maps?q=${encodeURIComponent(formLoc)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
-                    aria-hidden="false"
-                    title="Map Preview"
-                 />
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">地點 (顯示於卡片)</label>
+              <input 
+                type="text" 
+                placeholder="例如: 東京鐵塔" 
+                value={formLoc} 
+                onChange={e => setFormLoc(e.target.value)} 
+                className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black" 
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">GOOGLE MAP 連結</label>
+              <div className="relative flex items-center">
+                  <input 
+                    type="text" 
+                    placeholder="帶入 Google Map URL" 
+                    value={formMapUrl} 
+                    onChange={e => setFormMapUrl(e.target.value)} 
+                    className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none pr-12 focus:ring-2 focus:ring-black" 
+                  />
+                  <MapPin size={18} className="absolute right-4 text-gray-400" />
               </div>
+            </div>
+          </div>
+          
+          {/* Map Preview Frame */}
+          {mapEmbedUrl && (
+            <div className="w-full h-48 rounded-xl overflow-hidden border border-gray-100 shadow-inner bg-gray-50">
+               <iframe
+                 width="100%"
+                 height="100%"
+                 frameBorder="0"
+                 style={{ border: 0 }}
+                 src={mapEmbedUrl}
+                 allowFullScreen
+               ></iframe>
+            </div>
           )}
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">內容說明</label>
+            <textarea rows={3} placeholder="備註、確認碼等..." value={formContent} onChange={e => setFormContent(e.target.value)} className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black resize-none" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">相關連結 (選填)</label>
+            <input 
+              type="url" 
+              placeholder="https://..." 
+              value={formUrl} 
+              onChange={e => setFormUrl(e.target.value)} 
+              className="w-full p-4 bg-gray-100 text-gray-900 rounded-xl border-none focus:ring-2 focus:ring-black" 
+            />
+          </div>
 
           <div className="pt-4 flex gap-3">
             {editingItem && (
                 !showDeleteConfirm ? (
-                    <button 
-                        type="button" 
-                        onClick={() => setShowDeleteConfirm(true)} 
-                        className="p-3 text-red-500 bg-red-50 rounded-xl flex-1 font-medium hover:bg-red-100 transition-colors"
-                    >
-                        刪除
-                    </button>
+                    <button type="button" onClick={() => setShowDeleteConfirm(true)} className="p-4 text-red-500 bg-red-50 rounded-xl flex-1 font-bold">刪除</button>
                 ) : (
-                    <div className="flex flex-1 gap-2 animate-in fade-in zoom-in duration-200">
-                        <button 
-                            type="button" 
-                            onClick={() => setShowDeleteConfirm(false)} 
-                            className="p-3 text-gray-500 bg-gray-100 rounded-xl flex-1 font-medium hover:bg-gray-200 transition-colors"
-                        >
-                            取消
-                        </button>
-                        <button 
-                            type="button" 
-                            onClick={executeDelete} 
-                            className="p-3 text-white bg-red-500 rounded-xl flex-[2] font-bold hover:bg-red-600 transition-colors"
-                        >
-                            確認刪除
-                        </button>
-                    </div>
+                    <button type="button" onClick={executeDelete} className="p-4 text-white bg-red-500 rounded-xl flex-1 font-bold">確認刪除</button>
                 )
             )}
-            <button type="submit" className="p-3 bg-black text-white rounded-xl flex-[2] font-medium hover:bg-gray-900 transition-colors">
-              儲存
-            </button>
+            <button type="submit" className="p-4 bg-black text-white rounded-xl flex-[2] font-bold">儲存</button>
           </div>
         </form>
       </Modal>
