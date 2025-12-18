@@ -1,6 +1,6 @@
 // --- Database Schema Types ---
 export type SplitType = 'even' | 'custom';
-export type ItemType = string; 
+export type ItemType = string;
 export type NoteType = string;
 export type RecType = string;
 
@@ -18,7 +18,7 @@ export interface AppSettings {
 }
 
 export interface Trip {
-  id: string;           
+  id: string;
   shortId: string;      // TK-8F2A 格式的分享碼
   title: string;
   days: number;
@@ -26,6 +26,8 @@ export interface Trip {
   startDate: string;
   endDate?: string;
   lastSync?: number;    // 同步時間戳
+  role?: string;        // 'OWNER' | 'EDITOR'
+  coverImage?: string;
 }
 
 export interface ItineraryItem {

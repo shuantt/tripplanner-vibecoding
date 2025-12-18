@@ -97,7 +97,7 @@ const MainApp = () => {
     const end = new Date(endDate);
     const days = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    dispatch({ type: 'ADD_TRIP', payload: { id: generateId(), shortId: generateShortId(), title: tripTitle, days, startDate, endDate, participants: parts } });
+    dispatch({ type: 'ADD_TRIP', payload: { id: generateId(), shortId: generateShortId(), title: tripTitle, days, startDate, endDate, participants: parts, role: 'OWNER' } });
 
     // Reset and Close
     setTripTitle('');
