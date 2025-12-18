@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../../StoreContext';
-import { useAuth } from '../../AuthContext';
 import { Trip, Expense, SplitType } from '../../types';
 import { Plus, DollarSign, User, Search, Trash2, ArrowRight, Filter } from 'lucide-react';
 import { calculateDebts, generateId } from '../../utils';
@@ -16,6 +15,38 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
   const [payerFilter, setPayerFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [personDetail, setPersonDetail] = useState<string | null>(null);
+
+  // Personal Summary Logic
+  const getPersonalSummary = (person: string) => {
+    const consumption: { title: string; amount: number }[] = [];
+    const paid: { title: string; amount: number }[] = [];
+    let totalConsumption = 0;
+    let totalPaid = 0;
+
+    tripExpenses.forEach(e => {
+      // 1. Calculate Consumption (Your Share)
+      let myShare = 0;
+      if (e.splitType === 'even') {
+        myShare = e.amount / trip.participants.length;
+      } else if (e.customSplits[person]) {
+        myShare = e.customSplits[person];
+      }
+
+      if (myShare > 0) {
+        consumption.push({ title: e.title, amount: myShare });
+        totalConsumption += myShare;
+      }
+
+      // 2. Calculate Paid (Advanced)
+      if (e.payer === person) {
+        paid.push({ title: e.title, amount: e.amount });
+        totalPaid += e.amount;
+      }
+    });
+
+    return { consumption, paid, totalConsumption, totalPaid };
+  };
 
   // UI State for delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -118,7 +149,7 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
             onClick={() => setPersonDetail(p)}
             className="flex flex-col items-center gap-1 min-w-[60px] cursor-pointer active:scale-95 transition-transform"
           >
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow-sm border-2 ${p === user?.name ? 'bg-black text-white border-black' : 'bg-white text-gray-700 border-gray-100'}`}>
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow-sm border-2 bg-white text-gray-700 border-gray-100 hover:border-black transition-colors">
               {p.charAt(0)}
             </div>
             <span className="text-[10px] font-bold text-gray-500 truncate max-w-full">{p}</span>
@@ -292,6 +323,61 @@ export const Expenses: React.FC<ExpensesProps> = ({ trip }) => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Personal Summary Modal */}
+      <Modal isOpen={!!personDetail} onClose={() => setPersonDetail(null)} title={personDetail ? `${personDetail} 的消費明細` : ''}>
+        {personDetail && (() => {
+          const { consumption, paid, totalConsumption, totalPaid } = getPersonalSummary(personDetail);
+          return (
+            <div className="space-y-6">
+              {/* Consumption Section (Red) */}
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 mb-3 flex justify-between items-end">
+                  <span>💸 個人消費 (應付)</span>
+                  <span className="text-xl font-mono text-red-500 font-bold">-${totalConsumption.toFixed(0)}</span>
+                </h4>
+                <div className="bg-gray-50 rounded-xl p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                  {consumption.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{item.title}</span>
+                      <span className="font-mono text-gray-900 font-medium">${item.amount.toFixed(0)}</span>
+                    </div>
+                  ))}
+                  {consumption.length === 0 && <div className="text-center text-gray-400 text-xs">無消費紀錄</div>}
+                </div>
+              </div>
+
+              <hr className="border-gray-100" />
+
+              {/* Paid Section (Green) */}
+              <div>
+                <h4 className="text-sm font-bold text-gray-900 mb-3 flex justify-between items-end">
+                  <span>💰 代墊支出 (已付)</span>
+                  <span className="text-xl font-mono text-green-600 font-bold">+${totalPaid.toFixed(0)}</span>
+                </h4>
+                <div className="bg-gray-50 rounded-xl p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                  {paid.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{item.title}</span>
+                      <span className="font-mono text-gray-900 font-medium">${item.amount.toFixed(0)}</span>
+                    </div>
+                  ))}
+                  {paid.length === 0 && <div className="text-center text-gray-400 text-xs">無付款紀錄</div>}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <div className="flex justify-between items-center bg-gray-900 text-white p-4 rounded-xl shadow-lg">
+                  <span className="text-sm font-bold opacity-80">淨收支</span>
+                  <span className={`text-2xl font-mono font-bold ${(totalPaid - totalConsumption) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {(totalPaid - totalConsumption) > 0 ? '+' : ''}{(totalPaid - totalConsumption).toFixed(0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
