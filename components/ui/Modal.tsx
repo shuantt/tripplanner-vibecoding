@@ -19,15 +19,15 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
   if (!visible) return null;
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none`}>
+    <div className={`fixed inset-0 z-[100] flex items-end sm:items-center justify-center pointer-events-none`}>
       {/* Backdrop */}
-      <div 
+      <div
         className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 pointer-events-auto ${isOpen ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
-      
+
       {/* Content */}
-      <div 
+      <div
         className={`bg-white w-full sm:w-[500px] sm:rounded-2xl rounded-t-2xl shadow-2xl pointer-events-auto transform transition-transform duration-300 max-h-[90vh] flex flex-col ${isOpen ? 'translate-y-0' : 'translate-y-full sm:translate-y-10 sm:opacity-0'}`}
       >
         {/* Sticky Header with Background */}
@@ -37,9 +37,9 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
             <X size={20} className="text-gray-600" />
           </button>
         </div>
-        
+
         {/* Scrollable Body */}
-        <div className="overflow-y-auto p-6">
+        <div className="overflow-y-auto p-6 pb-20 sm:pb-6">
           {children}
         </div>
       </div>

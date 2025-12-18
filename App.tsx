@@ -12,7 +12,7 @@ import { Recommendations } from './components/modules/Recommendations';
 import { Notes } from './components/modules/Notes';
 import { SettingsModule } from './components/modules/Settings';
 
-const TripCard: React.FC<{ trip: Trip; onClick: () => void; onDelete: (e: React.MouseEvent) => void; onEdit: (e: React.MouseEvent) => void }> = ({ trip, onClick, onDelete, onEdit }) => {
+const TripCard: React.FC<{ trip: Trip; onClick: () => void; onDelete: (e: React.MouseEvent) => void }> = ({ trip, onClick, onDelete }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = (e: React.MouseEvent) => {
@@ -44,7 +44,7 @@ const TripCard: React.FC<{ trip: Trip; onClick: () => void; onDelete: (e: React.
           <button onClick={handleCopy} className={`p-2 rounded-full transition-all ${copied ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-black hover:bg-gray-100'}`}>
             <Copy size={16} />
           </button>
-          <button onClick={onEdit} className="text-gray-400 hover:text-black p-2 rounded-full hover:bg-gray-100 transition-colors"><SettingsIcon size={16} /></button>
+
           {trip.role === 'OWNER' && (
             <button onClick={onDelete} className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
           )}
@@ -74,7 +74,6 @@ const MainApp = () => {
   const [startDate, setStartDate] = useState(formatDateValue(new Date()));
   const [endDate, setEndDate] = useState(formatDateValue(new Date(new Date().setDate(new Date().getDate() + 3))));
   const [tripParticipants, setTripParticipants] = useState('');
-  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
   const activeTrip = state.trips.find(t => t.id === activeTripId);
 
@@ -91,18 +90,18 @@ const MainApp = () => {
     }
   };
 
-  const handleSaveTrip = (e: React.FormEvent) => {
+  const handleCreateTrip = (e: React.FormEvent) => {
     e.preventDefault();
     const parts = tripParticipants.split(',').map(s => s.trim()).filter(Boolean);
     const start = new Date(startDate);
     const end = new Date(endDate);
     const days = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    if (editingTrip) {
-      dispatch({ type: 'UPDATE_TRIP', payload: { ...editingTrip, title: tripTitle, days, startDate, endDate, participants: parts } });
-    } else {
-      dispatch({ type: 'ADD_TRIP', payload: { id: generateId(), shortId: generateShortId(), title: tripTitle, days, startDate, endDate, participants: parts } });
-    }
+    dispatch({ type: 'ADD_TRIP', payload: { id: generateId(), shortId: generateShortId(), title: tripTitle, days, startDate, endDate, participants: parts } });
+
+    // Reset and Close
+    setTripTitle('');
+    setTripParticipants('');
     setIsNewTripModalOpen(false);
   };
 
@@ -129,13 +128,11 @@ const MainApp = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-20 overflow-y-auto">
           {state.trips.map(trip => (
-            <TripCard key={trip.id} trip={trip} onClick={() => setActiveTripId(trip.id)} onDelete={(e) => { e.stopPropagation(); if (confirm('確定要刪除嗎？這將會同步刪除所有成員的旅程。')) dispatch({ type: 'DELETE_TRIP', payload: trip.id }) }} onEdit={(e) => {
-              e.stopPropagation(); setEditingTrip(trip); setTripTitle(trip.title); setStartDate(trip.startDate); setEndDate(trip.endDate || ''); setTripParticipants(trip.participants.join(',')); setIsNewTripModalOpen(true);
-            }} />
+            <TripCard key={trip.id} trip={trip} onClick={() => setActiveTripId(trip.id)} onDelete={(e) => { e.stopPropagation(); if (confirm('確定要刪除嗎？這將會同步刪除所有成員的旅程。')) dispatch({ type: 'DELETE_TRIP', payload: trip.id }) }} />
           ))}
 
           <div className="flex gap-2 min-h-[140px]">
-            <button onClick={() => { setEditingTrip(null); setTripTitle(''); setTripParticipants(''); setIsNewTripModalOpen(true); }} className="flex-1 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400 hover:bg-white hover:text-black hover:border-black transition-all">
+            <button onClick={() => { setTripTitle(''); setTripParticipants(''); setIsNewTripModalOpen(true); }} className="flex-1 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400 hover:bg-white hover:text-black hover:border-black transition-all">
               <Plus size={24} /> <span className="text-sm font-bold mt-1">建立新旅程</span>
             </button>
             <button onClick={() => setIsJoinModalOpen(true)} className="flex-1 border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400 hover:bg-white hover:text-blue-600 hover:border-blue-600 transition-all">
@@ -144,8 +141,8 @@ const MainApp = () => {
           </div>
         </div>
 
-        <Modal isOpen={isNewTripModalOpen} onClose={() => setIsNewTripModalOpen(false)} title={editingTrip ? "行程設定" : "建立新旅程"}>
-          <form onSubmit={handleSaveTrip} className="space-y-5">
+        <Modal isOpen={isNewTripModalOpen} onClose={() => setIsNewTripModalOpen(false)} title="建立新旅程">
+          <form onSubmit={handleCreateTrip} className="space-y-5">
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">旅程名稱</label>
               <input required type="text" placeholder="目的地" value={tripTitle} onChange={e => setTripTitle(e.target.value)} className="w-full p-4 bg-gray-100 rounded-xl text-gray-900 focus:ring-2 focus:ring-black outline-none border-none" />
@@ -164,7 +161,7 @@ const MainApp = () => {
               <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">參與人員</label>
               <input required type="text" placeholder="用逗號隔開" value={tripParticipants} onChange={e => setTripParticipants(e.target.value)} className="w-full p-4 bg-gray-100 rounded-xl text-gray-900 focus:ring-2 focus:ring-black outline-none border-none" />
             </div>
-            <button type="submit" className="w-full p-4 bg-black text-white rounded-xl font-bold active:scale-95 transition-transform">{editingTrip ? "儲存更新" : "立即建立"}</button>
+            <button type="submit" className="w-full p-4 bg-black text-white rounded-xl font-bold active:scale-95 transition-transform">立即建立</button>
           </form>
         </Modal>
 

@@ -40,6 +40,7 @@ function getTemplateData(userId: string) {
   const tripId = crypto.randomUUID();
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let shortId = '';
+  // Generate 7-char ID: XXX-XXXX
   for (let i = 0; i < 3; i++) shortId += chars.charAt(Math.floor(Math.random() * chars.length));
   shortId += '-';
   for (let i = 0; i < 4; i++) shortId += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -199,11 +200,18 @@ app.get('/api/trips', async (c) => {
     ORDER BY t.start_date DESC
   `).bind(user.sub).all();
 
-  // Parse participants and add Role
+  // Parse participants and add Role, Map snake_case to camelCase
   const trips = results.map((t: any) => ({
-    ...t,
+    id: t.id,
+    shortId: t.short_id,
+    title: t.title,
+    days: t.days,
+    startDate: t.start_date,
+    endDate: t.end_date,
     participants: t.participants ? t.participants.split(',') : [],
-    role: t.role // Return Role to frontend
+    role: t.role,
+    lastSync: t.last_sync,
+    coverImage: t.cover_image
   }));
 
   return c.json(trips)
@@ -368,11 +376,16 @@ app.get('/api/trips/:tripId/full', async (c) => {
 
   // Also return Metadata including participants
   return c.json({
-    // We don't really use this top level logic in loadTrips heavily (we use /api/trips for metadata), 
-    // but updated for consistency if we want to reload details.
     metadata: {
-      ...trip,
-      participants: (trip.participants as string || '').split(',')
+      id: trip.id,
+      shortId: trip.short_id,
+      title: trip.title,
+      days: trip.days,
+      startDate: trip.start_date,
+      endDate: trip.end_date,
+      participants: (trip.participants as string || '').split(','),
+      role: member.role,
+      lastSync: trip.last_sync
     },
     itinerary: items.results.map((i: any) => ({
       id: i.id, tripId, dayIndex: i.day_index, time: i.time, title: i.title, location: i.location, mapUrl: i.map_url, content: i.content, type: i.type, url: i.url
