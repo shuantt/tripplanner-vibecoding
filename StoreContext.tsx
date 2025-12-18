@@ -1,4 +1,4 @@
-import React, { createContext, useReducer, useEffect, useContext, ReactNode, useState } from 'react';
+import React, { createContext, useReducer, useEffect, useContext, ReactNode, useState, useRef } from 'react';
 import { AppState, Action, Trip, AppSettings, ItineraryItem, Expense, Recommendation, Note } from './types';
 import { generateId, generateShortId } from './utils';
 
@@ -183,37 +183,167 @@ const reducer = (state: AppState, action: Action): AppState => {
 export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE, (initial) => {
+    // 1. Load from localStorage (Optimistic)
     const stored = localStorage.getItem(STORAGE_KEY);
     return stored ? JSON.parse(stored) : initial;
   });
 
+  const stateRef = useRef(state);
   useEffect(() => {
+    stateRef.current = state;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
-  const syncTrip = async (tripId: string) => {
-    const trip = state.trips.find(t => t.id === tripId);
+  const API_BASE = 'https://tripplanner-api.tehsuan-tht.workers.dev';
+
+  // 2. Fetch all trips from API on mount
+  const loadTrips = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/trips`);
+      if (res.ok) {
+        const remoteTrips: Trip[] = await res.json();
+        // Basic merge: If backend has updated lastSync? 
+        // For MVP: We replace local trips list with server list, 
+        // but we need to fetch items for them if we don't have them or they are stale.
+        // This is complex for MVP.
+        // SIMPLEST: Trust Server.
+        // Note: If we just trust server, we might lose unsynced local changes if cache cleared.
+        // But we assume auto-sync works.
+
+        const fullState: AppState = { ...INITIAL_STATE, settings: state.settings, trips: remoteTrips };
+
+        // Fetch details for all trips
+        // (Optimization: Only fetch if needed. But MVP = fetch all)
+        if (remoteTrips.length > 0) {
+          fullState.itinerary = [];
+          fullState.expenses = [];
+          fullState.recommendations = [];
+          fullState.notes = [];
+
+          await Promise.all(remoteTrips.map(async (t) => {
+            try {
+              const detRes = await fetch(`${API_BASE}/api/trips/${t.id}/full`);
+              if (detRes.ok) {
+                const det = await detRes.json();
+                fullState.itinerary.push(...det.itinerary);
+                fullState.expenses.push(...det.expenses);
+                fullState.recommendations.push(...det.recommendations);
+                fullState.notes.push(...det.notes);
+              }
+            } catch (e) { console.error('Failed to load details for', t.id) }
+          }));
+        } else {
+          // Keep Default template if server empty? No, respect empty server.
+          fullState.itinerary = [];
+        }
+
+        dispatch({ type: 'SET_STATE', payload: fullState });
+      }
+    } catch (e) {
+      console.error("Failed to load trips", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTrips();
+  }, []);
+
+  // --- SYNC LOGIC ---
+
+  const performSync = async (tripId: string) => {
+    const currentState = stateRef.current; // Use Ref to get latest state in async/timeout
+    const trip = currentState.trips.find(t => t.id === tripId);
     if (!trip) return;
+
+    // Optimistic lastSync update?
+
     const data = {
       trip,
-      itinerary: state.itinerary.filter(i => i.tripId === tripId),
-      expenses: state.expenses.filter(e => e.tripId === tripId),
-      recommendations: state.recommendations.filter(r => r.tripId === tripId),
-      notes: state.notes.filter(n => n.tripId === tripId),
+      itinerary: currentState.itinerary.filter(i => i.tripId === tripId),
+      expenses: currentState.expenses.filter(e => e.tripId === tripId),
+      recommendations: currentState.recommendations.filter(r => r.tripId === tripId),
+      notes: currentState.notes.filter(n => n.tripId === tripId),
     };
+
     try {
-      await fetch('https://tripplanner-api.tehsuan-tht.workers.dev/api/sync', {
-        method: 'POST',
-        body: JSON.stringify(data),
-        headers: { 'Content-Type': 'application/json' }
-      });
+      await fetch(`${API_BASE}/api/sync`, { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } });
+      console.log("Synced", tripId);
     } catch (e) { console.error("Sync failed", e); }
+  }
+
+  const [dirtyTripId, setDirtyTripId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (dirtyTripId) {
+      const timer = setTimeout(() => {
+        performSync(dirtyTripId);
+        setDirtyTripId(null);
+      }, 2000); // 2 seconds debounce
+      return () => clearTimeout(timer);
+    }
+  }, [dirtyTripId]);
+
+  const deleteTripApi = async (tripId: string) => {
+    try {
+      await fetch(`${API_BASE}/api/trips/${tripId}`, { method: 'DELETE' });
+    } catch (e) { console.error("Delete failed", e); }
+  };
+
+  const dispatchWithSync = (action: Action) => {
+    dispatch(action); // Update Local Immediately
+
+    // Determine Trip ID
+    let tid: string | undefined;
+    // Extract Trip ID logic
+    if (action.type === 'ADD_TRIP' || action.type === 'UPDATE_TRIP') tid = action.payload.id;
+    else if (['ADD_ITEM', 'UPDATE_ITEM', 'SWAP_DAYS', 'ADD_EXPENSE', 'UPDATE_EXPENSE', 'ADD_REC', 'UPDATE_REC', 'ADD_NOTE', 'UPDATE_NOTE'].includes(action.type)) {
+      // @ts-ignore
+      tid = action.payload.tripId || (action.payload as any).id;
+      if (!tid && 'tripId' in action.payload) tid = (action.payload as any).tripId;
+    }
+
+    // Handle Deletes (Immediate API Call + State Update)
+    if (action.type === 'DELETE_TRIP') {
+      deleteTripApi(action.payload);
+      return;
+    }
+
+    // Deleting Items: Need tripId from PREVIOUS state to sync that trip
+    if (action.type.startsWith('DELETE_') && action.type !== 'DELETE_TRIP') {
+      const id = action.payload as string;
+      let found;
+      // Use stateRef.current because dispatch happened? No, reducer runs, stateRef updates in useEffect later.
+      // Actually, 'state' (in closure) is BEFORE dispatch here? NO. 'dispatch' is stable fn. 'state' is constant in this render scope.
+      // dispatch(action) triggers re-render, but this function continues.
+      // So 'state' here is the PRE-UPDATE state. Perfect for finding the item before it's deleted!
+
+      if (action.type === 'DELETE_ITEM') found = state.itinerary.find(i => i.id === id);
+      else if (action.type === 'DELETE_EXPENSE') found = state.expenses.find(e => e.id === id);
+      else if (action.type === 'DELETE_REC') found = state.recommendations.find(r => r.id === id);
+      else if (action.type === 'DELETE_NOTE') found = state.notes.find(n => n.id === id);
+
+      if (found) tid = (found as any).tripId;
+    }
+
+    // Reorder
+    if (action.type.startsWith('REORDER_')) {
+      const { id } = action.payload as { id: string };
+      let found;
+      if (action.type === 'REORDER_REC') found = state.recommendations.find(r => r.id === id);
+      else if (action.type === 'REORDER_NOTE') found = state.notes.find(n => n.id === id);
+      if (found) tid = (found as any).tripId;
+    }
+
+    if (tid) setDirtyTripId(tid);
   };
 
   const importTripById = async (shortId: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const res = await fetch(`https://tripplanner-api.tehsuan-tht.workers.dev/api/trip/${shortId.toUpperCase()}`);
+      const res = await fetch(`${API_BASE}/api/trip/${shortId.toUpperCase()}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (!state.trips.find(t => t.id === data.trip.id)) {
@@ -241,7 +371,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   return (
-    <StoreContext.Provider value={{ state, dispatch, syncTrip, importTripById, isLoading }}>
+    <StoreContext.Provider value={{ state, dispatch: dispatchWithSync, syncTrip: performSync, importTripById, isLoading }}>
       {children}
     </StoreContext.Provider>
   );
